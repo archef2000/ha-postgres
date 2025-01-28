@@ -1,0 +1,68 @@
+x-variables:
+  common_settings: &common_settings
+    image: archef2000/ha-postgres
+    environment:
+      INITIAL_CLUSTER: "etcd1,etcd2,etcd3"
+      ETCD_ENDPOINT: etcd
+      #PATRONI_LOG_LEVEL: DEBUG
+      PATRONI_RESTAPI_PASSWORD: 
+      PATRONI_REWIND_PASSWORD: 
+      PATRONI_REPLICATION_PASSWORD: 
+      PATRONI_SUPERUSER_PASSWORD: 
+      PGBOUNCER_AUTH_PASS: 
+      PATRONI_ETCD3_PASSWORD: 
+      ETCD_SUPERUSER_PASSWORD: 
+      ETCD_CLUSTER_TOKEN: 
+    networks:
+      - ha-postgres
+
+networks:
+  ha-postgres:
+    driver: overlay
+    name: ha-postgres
+
+services:
+  etcd:
+    <<: *common_settings
+    command: etcd
+    hostname: etcd{{.Task.Slot}}
+    deploy:
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: stop-first
+      mode: replicated
+      replicas: 3
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - <path available on all nodes>/database/etcd{{.Task.Slot}}:/data/etcd
+
+  postgres:
+    <<: *common_settings
+    command: postgres
+    hostname: postgres{{.Task.Slot}}
+    deploy:
+      update_config:
+        parallelism: 1
+        delay: 20s
+        order: stop-first
+      mode: replicated
+      replicas: 3
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - <path available on all nodes>/database/postgres{{.Task.Slot}}:/var/lib/postgresql/data
+
+  postgres-proxy:
+    hostname: hapostgres
+    command: proxy
+    # only really needs: ETCD_ENDPOINT; PATRONI_ETCD3_PASSWORD; PGBOUNCER_AUTH_PASS 
+    <<: *common_settings
+    networks:
+      - ha-postgres
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - 5432 # postgres r/w
+      - 7000 # haproxy stats
+    deploy:
+      replicas: 2

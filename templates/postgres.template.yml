@@ -1,0 +1,44 @@
+#scope: pg_cluster
+#namespace: /service/
+name: $HOSTNAME
+
+restapi:
+  listen: 0.0.0.0:${PATRONI_LISTEN_PORT}
+  connect_address: $HOSTNAME:${PATRONI_LISTEN_PORT}
+
+bootstrap:
+  dcs:
+    ttl: 20
+    loop_wait: 5
+    retry_timeout: 6
+    primary_start_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      parameters: {max_connections: 100, wal_level: "replica", max_wal_senders: 10, wal_log_hints: "on", password_encryption: "scram-sha-256"}
+      #use_slots: true
+      pg_hba:
+      - host replication replicator 127.0.0.1/32 md5
+      - host replication replicator 0.0.0.0/0 md5
+      - host all all 0.0.0.0/0 scram-sha-256
+
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+  
+  post_bootstrap: /scripts/post-bootstrap.sh
+
+postgresql:
+  listen: 0.0.0.0:$POSTGRES_LISTEN_PORT
+  connect_address: $HOSTNAME:5432
+  proxy_address: $HOSTNAME:$proxy_port
+  data_dir: /var/lib/postgresql/data
+  bin_dir: /usr/lib/postgresql/16/bin
+  pgpass: /tmp/pgpass
+
+tags:
+    nofailover: false
+    noloadbalance: false
+    clonefrom: false
+    nosync: false
+    nostream: false
